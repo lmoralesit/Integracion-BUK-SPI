@@ -1,6 +1,7 @@
 # app/core/config.py
 import re
 from pathlib import Path
+from urllib.parse import quote_plus
 from typing import Optional
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -137,24 +138,38 @@ class Settings(BaseSettings):
 
     @property
     def sqlserver_url(self) -> str:
-        """Genera Connection String seguro para SQL Server codificando caracteres especiales."""
-        import urllib.parse
-        user = urllib.parse.quote_plus(self.SQLSERVER_USER)
-        pwd = urllib.parse.quote_plus(self.SQLSERVER_PASSWORD.get_secret_value())
-        host = urllib.parse.quote_plus(self.SQLSERVER_HOST)
-        db = urllib.parse.quote_plus(self.SQLSERVER_DATABASE)
-        driver = urllib.parse.quote_plus(self.SQLSERVER_DRIVER)
-        return f"mssql+pyodbc://{user}:{pwd}@{host}:{self.SQLSERVER_PORT}/{db}?driver={driver}"
+        """
+        Mandamiento 1 & 3: Generación segura de URL de conexión para SQLAlchemy + PyODBC.
+        Sanitiza llaves '{}', codifica caracteres especiales en contraseñas/hosts (ej. localhost\\SQLEXPRESS)
+        y previene el error ODBC IM012 (Sintaxis en la palabra clave DRIVER).
+        """
+        user = quote_plus(self.SQLSERVER_USER)
+        pwd = quote_plus(self.SQLSERVER_PASSWORD.get_secret_value())
+        host = quote_plus(self.SQLSERVER_HOST)
+        db = quote_plus(self.SQLSERVER_DATABASE)
+        
+        # Eliminamos llaves del driver si vienen del .env y convertimos espacios a '+'
+        clean_driver = (
+            self.SQLSERVER_DRIVER
+            .replace("{", "")
+            .replace("}", "")
+            .strip()
+            .replace(" ", "+")
+        )
+        
+        return f"mssql+pyodbc://{user}:{pwd}@{host}:{self.SQLSERVER_PORT}/{db}?driver={clean_driver}"
 
     @property
     def oracle_url(self) -> str:
-        """Genera Connection String seguro para Oracle DB codificando caracteres especiales."""
-        import urllib.parse
-        user = urllib.parse.quote_plus(self.ORACLE_USER)
-        pwd = urllib.parse.quote_plus(self.ORACLE_PASSWORD.get_secret_value())
-        host = urllib.parse.quote_plus(self.ORACLE_HOST)
-        service = urllib.parse.quote_plus(self.ORACLE_SERVICE_NAME)
-        return f"oracle+oracledb://{user}:{pwd}@{host}:{self.ORACLE_PORT}/?service_name={service}"
+        """
+        Mandamiento 1 & 3: Generación segura de URL para Oracle SPI (Infocent).
+        Aplica URL-encoding para proteger credenciales corporativas complejas.
+        """
+        user = quote_plus(self.ORACLE_USER)
+        pwd = quote_plus(self.ORACLE_PASSWORD.get_secret_value())
+        host = quote_plus(self.ORACLE_HOST)
+        
+        return f"oracle+oracledb://{user}:{pwd}@{host}:{self.ORACLE_PORT}/?service_name={self.ORACLE_SERVICE_NAME}"
 
     model_config = SettingsConfigDict(
         env_file=str(ROOT_DIR / ".env"),  # Ruta absoluta garantizada
