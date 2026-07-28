@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     MAIL_TO_CAPITAL_HUMANO: str = Field(...)
     MAIL_TO_NOMINA_CARACAS: str = Field(...)
     MAIL_TO_NOMINA_TURMERO: str = Field(...)
+    
+    NOTIFY_EMAIL_DEV: str = Field(..., env="MAIL_TO_DEV")
+    NOTIFY_EMAIL_TURMERO: str = Field(..., env="MAIL_TO_NOMINA_TURMERO")
+    NOTIFY_EMAIL_CARACAS: str = Field(..., env="MAIL_TO_NOMINA_CARACAS")
+    NOTIFY_EMAIL_RRHH: str = Field(..., env="MAIL_TO_CAPITAL_HUMANO")
 
     # ---------------------------------------------------------------------------
     # VALIDADORES Y SANITIZADORES DE SEGURIDAD
@@ -139,25 +144,37 @@ class Settings(BaseSettings):
     @property
     def sqlserver_url(self) -> str:
         """
-        Mandamiento 1 & 3: Generación segura de URL de conexión para SQLAlchemy + PyODBC.
-        Sanitiza llaves '{}', codifica caracteres especiales en contraseñas/hosts (ej. localhost\\SQLEXPRESS)
-        y previene el error ODBC IM012 (Sintaxis en la palabra clave DRIVER).
+        Mandamiento 1 & 3: Conexión blindada para SQL Server Staging / ODS.
+        Utiliza el patrón 'odbc_connect' para evitar que el parser de URL de SQLAlchemy
+        corrompa instancias nombradas con barra invertida (ej. localhost\\SQLEXPRESS)
+        y previene el error ODBC 11001 (Host desconocido).
         """
-        user = quote_plus(self.SQLSERVER_USER)
-        pwd = quote_plus(self.SQLSERVER_PASSWORD.get_secret_value())
-        host = quote_plus(self.SQLSERVER_HOST)
-        db = quote_plus(self.SQLSERVER_DATABASE)
-        
-        # Eliminamos llaves del driver si vienen del .env y convertimos espacios a '+'
         clean_driver = (
             self.SQLSERVER_DRIVER
             .replace("{", "")
             .replace("}", "")
             .strip()
-            .replace(" ", "+")
         )
         
-        return f"mssql+pyodbc://{user}:{pwd}@{host}:{self.SQLSERVER_PORT}/{db}?driver={clean_driver}"
+        pwd = self.SQLSERVER_PASSWORD.get_secret_value()
+        
+        # En ODBC Driver 17, si usamos instancia nombrada (\) o especificamos puerto con coma,
+        # no se puede separar el puerto en la URL de SQLAlchemy; se usa SERVER directamente.
+        if "\\" in self.SQLSERVER_HOST or "," in self.SQLSERVER_HOST:
+            server_str = self.SQLSERVER_HOST
+        else:
+            server_str = f"{self.SQLSERVER_HOST},{self.SQLSERVER_PORT}" if self.SQLSERVER_PORT else self.SQLSERVER_HOST
+            
+        odbc_str = (
+            f"DRIVER={{{clean_driver}}};"
+            f"SERVER={server_str};"
+            f"DATABASE={self.SQLSERVER_DATABASE};"
+            f"UID={{{self.SQLSERVER_USER}}};"
+            f"PWD={{{pwd}}};"
+            f"TrustServerCertificate=yes;"
+        )
+        
+        return f"mssql+pyodbc:///?odbc_connect={quote_plus(odbc_str)}"
 
     @property
     def oracle_url(self) -> str:

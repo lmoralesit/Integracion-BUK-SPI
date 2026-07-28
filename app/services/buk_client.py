@@ -22,7 +22,8 @@ class BukAPIClient:
         return {
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "auth_token": self.token  # Cabecera oficial requerida por BUK
+            "Authorization": f"Bearer {self.token}",
+            "auth_token": self.token  # Compatibilidad con API BUK heredada
         }
 
     async def get_employee_detail(self, employee_id: str | int) -> Dict[str, Any]:

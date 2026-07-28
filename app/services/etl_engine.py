@@ -37,8 +37,7 @@ async def fetch_buk_employee_with_retry(employee_id: str, max_retries: int = 2) 
     Mandamiento DevSecOps #2: Tolerancia a fallos con reintentos asíncronos y backoff exponencial.
     """
     url = f"{settings.BUK_API_BASE_URL}/employees/{employee_id}"
-    token_str = settings.BUK_API_TOKEN.get_secret_value() if hasattr(settings.BUK_API_TOKEN, 'get_secret_value') else str(settings.BUK_API_TOKEN)
-    headers = {"auth_token": token_str, "Accept": "application/json"}
+    headers = BukAPIClient()._get_headers()
     
     for attempt in range(1, max_retries + 1):
         try:
