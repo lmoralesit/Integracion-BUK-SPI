@@ -1,0 +1,123 @@
+# 🏗️ Arquitectura Base — ETL BUK-SPI
+
+## Estructura de Archivos Generada
+
+```
+Integracion BUK-SPI/
+├── .env.example          ← Template de variables de entorno
+├── .gitignore            ← Protege .env y artefactos Python
+├── requirements.txt      ← Dependencias del proyecto
+├── contexto_proyecto.md  ← Reglas de negocio (ya existía)
+│
+└── app/
+    ├── __init__.py
+    ├── config.py          ← Configuración segura (pydantic-settings)
+    ├── main.py            ← Punto de entrada FastAPI + Uvicorn
+    │
+    ├── database/
+    │   ├── __init__.py
+    │   ├── sql_server.py  ← Conexión SQL Server (pyodbc)
+    │   └── oracle.py      ← Conexión Oracle (oracledb)
+    │
+    ├── routers/
+    │   ├── __init__.py
+    │   ├── models.py      ← Modelos Pydantic del payload BUK
+    │   └── webhook.py     ← Endpoint POST /api/v1/buk/employee
+    │
+    ├── services/
+    │   └── __init__.py    ← (Listo para lógica ETL futura)
+    │
+    └── utils/
+        ├── __init__.py
+        └── transformers.py ← Funciones de transformación
+```
+
+---
+
+## Resumen por Archivo
+
+### 1. `app/config.py` — Configuración Segura (Regla 4)
+- Usa `pydantic-settings` para cargar **todas** las variables desde `.env`
+- Incluye: credenciales SQL Server, Oracle, tokens BUK, parámetros de auditoría ETL
+- **Cero hardcoding**: todo configurable desde variables de entorno
+- Campos con `Field(...)` son obligatorios; campos con `default` son opcionales
+
+### 2. `app/database/sql_server.py` — Conexión SQL Server
+- Función `get_sqlserver_connection()` → retorna `pyodbc.Connection`
+- Maneja excepciones: `InterfaceError`, `OperationalError`, `pyodbc.Error`
+- Incluye `test_sqlserver_connection()` para verificación rápida
+- Logging estructurado con emojis para rápida identificación
+
+### 3. `app/database/oracle.py` — Conexión Oracle
+- Función `get_oracle_connection()` → retorna `oracledb.Connection`
+- Usa modo **thin** (no requiere Oracle Client instalado)
+- Maneja excepciones: `DatabaseError` (con código ORA-), `InterfaceError`
+- Incluye `test_oracle_connection()` con `SELECT 1 FROM DUAL`
+
+### 4. `app/routers/models.py` — Modelos Pydantic
+Sub-modelos que mapean directamente al contexto del proyecto:
+| Sub-modelo | Campos clave |
+|:---|:---|
+| `DatosPersonales` | nombre, cédula, fecha_nacimiento, sexo |
+| `DatosContacto` | teléfonos, correos |
+| `DatosRIF` | tipo_rif, numero_rif |
+| `DatosDireccion` | estado, municipio, ciudad, dirección |
+| `DatosCargo` | codigo_cargo, nombre_cargo, unidad, centro_costo |
+| `DatosEmpresa` | codigo_empresa, nombre |
+| `CustomAttributes` | codigo_empresa (derivación obligatoria), ficha |
+| **`BukEmployeePayload`** | Modelo principal que agrupa todos los anteriores |
+
+### 5. `app/routers/webhook.py` — Endpoint Webhook
+- `POST /api/v1/buk/employee` → Recibe el payload de BUK
+- Validación automática con Pydantic (400 si el payload es inválido)
+- Imprime el payload en consola (fase de desarrollo)
+- Retorna HTTP 200 con confirmación
+
+### 6. `app/utils/transformers.py` — Transformaciones (Regla 3)
+| Función | Regla de Negocio |
+|:---|:---|
+| `truncar_codigo_cargo()` | Elimina `.0` con regex, trunca a 36 chars |
+| `formatear_rif()` | Limpia guiones/puntos, mayúscula (ej. `V145758120`) |
+| `sanitizar_nombre()` | Remueve acentos vía Unicode NFD, convierte a mayúsculas |
+| `valor_neutro_contacto()` | Inserta `.` o `-` en campos nulos (obligatoriedad SPI) |
+| `truncar_puesto()` | Trunca nombre de puesto a máx 36 caracteres |
+
+### 7. `app/main.py` — Aplicación FastAPI
+- Lifespan con logs de inicio/cierre
+- Router `webhook` registrado
+- Health check en `GET /health`
+- Swagger UI en `/docs`, ReDoc en `/redoc`
+- Ejecución directa: `python -m app.main`
+
+---
+
+## Pasos para Ejecutar
+
+```bash
+# 1. Crear entorno virtual
+python -m venv venv
+venv\Scripts\activate
+
+# 2. Instalar dependencias
+pip install -r requirements.txt
+
+# 3. Copiar y configurar variables de entorno
+copy .env.example .env
+# Editar .env con las credenciales reales
+
+# 4. Ejecutar la API
+uvicorn app.main:app --reload --port 8000
+
+# 5. Abrir documentación interactiva
+# http://localhost:8000/docs
+```
+
+---
+
+## Próximos Pasos Sugeridos
+
+1. **Crear el `.env`** con credenciales reales y probar la conexión
+2. **Implementar `services/`** con la lógica ETL de inserción
+3. **Crear tablas de staging** en SQL Server (control, equivalencias, históricos)
+4. **Conectar el webhook** al flujo completo: recibir → transformar → insertar en Oracle
+5. **Implementar validación de pre-existencia** (buscar cédula en `EO_PERSONA`)

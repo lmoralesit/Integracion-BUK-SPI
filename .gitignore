@@ -1,0 +1,39 @@
+# ══════════════════════════════════════════════
+# .gitignore — ETL BUK-SPI
+# ══════════════════════════════════════════════
+
+# Variables de entorno (NUNCA subir al repo)
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyo
+*.pyc
+
+# Entornos virtuales
+venv/
+.venv/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Distribución
+dist/
+build/
+*.egg-info/
