@@ -16,7 +16,7 @@ import pyodbc
 from pydantic import ValidationError
 
 from app.config import settings
-from app.routers.models import SPIEmployeePayload
+from app.api.models.payloads import SPIEmployeePayload
 from app.database.oracle import SPIDatabaseManager
 from app.services.buk_client import BukAPIClient
 from app.services.notifier import EmailNotifier

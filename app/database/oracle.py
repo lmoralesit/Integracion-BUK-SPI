@@ -13,7 +13,7 @@ from pydantic import SecretStr
 import oracledb
 
 from app.config import settings
-from app.routers.models import SPIEmployeePayload
+from app.api.models.payloads import SPIEmployeePayload
 
 logger = logging.getLogger(__name__)
 
