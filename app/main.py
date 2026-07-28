@@ -50,6 +50,14 @@ async def lifespan(app: FastAPI):
     logger.info("BUK API: %s", settings.BUK_API_BASE_URL)
     logger.info("=" * 60)
 
+    # Verificar conectividad de base de datos Staging al arrancar (Fail-Fast DevSecOps)
+    from app.core.db import verify_db_connection_resilient
+    import sys
+    
+    if not verify_db_connection_resilient():
+        logger.critical("🛑 Deteniendo arranque de la interfaz ETL BUK-SPI por imposibilidad de conectar a Staging.")
+        sys.exit(1)
+
     # Iniciar worker en segundo plano
     worker = ETLWorker(polling_interval=5.0)
     worker_task = asyncio.create_task(worker.start())

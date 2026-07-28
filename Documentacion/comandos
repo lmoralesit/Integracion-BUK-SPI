@@ -1,0 +1,12 @@
+.\venv\Scripts\activate
+uvicorn files.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload --env-file .env
+python run.py
+
+
+
+# 1. Actualizar pip para evitar fallos en compilación de ruedas (wheels) de drivers de BD
+python -m pip install --upgrade pip
+
+# 2. Instalar todas las dependencias del manifiesto de forma estricta
+pip install -r requirements.txt

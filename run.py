@@ -5,7 +5,14 @@ import sys
 from pathlib import Path
 import uvicorn
 
-# 1. Configuración de Logging Seguro (Sin PII ni Secretos en Claro)
+# ---------------------------------------------------------------------------
+# ANCLAJE ABSOLUTO DE RUTAS (Prevención de Workspace Drift y Path Traversal)
+# ---------------------------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
+APP_MODULE = "app.main:app"
+
+# Configuración de Logging Seguro (Mandamiento #5)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | [%(name)s] | %(message)s",
@@ -17,44 +24,42 @@ logger = logging.getLogger("DevSecOps.Launcher")
 def validate_environment() -> None:
     """
     Mandamiento 1 (Security by Design):
-    Valida la existencia del archivo de variables de entorno antes de iniciar.
+    Valida la existencia del archivo .env mediante rutas absolutas.
     Falla de forma segura (Fail-Secure) si el entorno no está preparado.
     """
-    env_path = Path(".env")
-    if not env_path.exists():
-        logger.critical("🚨 ARCHIVO .env NO ENCONTRADO. Abortando arranque por seguridad (Fail-Secure).")
-        logger.error("Asegúrate de haber configurado los secretos desde variables de entorno o archivo .env.")
+    if not ENV_PATH.exists():
+        logger.critical(f"🚨 ARCHIVO .env NO ENCONTRADO EN RUTA ABSOLUTA: [{ENV_PATH}]")
+        logger.error("Abortando arranque por seguridad. Sincroniza tus variables de entorno locales.")
         sys.exit(1)
     
-    logger.info("🔒 Entorno validado correctamente. Secretos no expuestos en logs.")
+    logger.info(f"🔒 Entorno validado en ruta absoluta: [{BASE_DIR}]. Secretos blindados.")
 
 def main() -> None:
     validate_environment()
     
-    # Determinar entorno (Por defecto 'development' por seguridad)
     env = os.getenv("APP_ENV", "development").lower()
     is_dev = env == "development"
     
-    # 🚨 Regla DevSecOps: Si es desarrollo, NUNCA abrir a 0.0.0.0
-    host = "127.0.0.1" if is_dev else os.getenv("SERVER_HOST", "0.0.0.0")
-    port = int(os.getenv("SERVER_PORT", 8000))
+    # 🚨 Mandamiento DevSecOps: Prohibido bindear a 0.0.0.0 en desarrollo local
+    host = "127.0.0.1" if is_dev else os.getenv("APP_HOST", "0.0.0.0")
+    port = int(os.getenv("APP_PORT", 8000))
     
     logger.info(f"🚀 Iniciando Integración ETL BUK-SPI en modo: [{env.upper()}]")
     logger.info(f"🛡️ Binding de red configurado en: http://{host}:{port}")
-    
-    if is_dev and host == "0.0.0.0":
-        logger.warning("⚠️ ALERTA: Ejecutando en modo DEV abierto a todas las interfaces (0.0.0.0). Usa con precaución.")
 
     try:
+        # Al pasar reload_dirs de forma explícita y absoluta, evitamos que WatchFiles
+        # evalúe rutas vacías ('') que rompen los escáneres en Windows.
         uvicorn.run(
-            app="app.main:app",       # Ruta correcta al módulo principal
+            app=APP_MODULE,
             host=host,
             port=port,
-            reload=is_dev,            # Reload asíncrono solo en desarrollo
-            workers=1 if is_dev else int(os.getenv("WORKERS_COUNT", 4)),
+            reload=is_dev,
+            reload_dirs=[str(BASE_DIR / "app")] if is_dev else None,
+            workers=1 if is_dev else int(os.getenv("WORKERS_COUNT", 2)),
             log_level="info",
             access_log=True,
-            server_header=False       # Seguridad: Ocultar cabecera 'Server: uvicorn' frente a fingerprinting
+            server_header=False  # Seguridad: Ocultar fingerprint del servidor
         )
     except Exception as e:
         logger.critical(f"🔥 Error crítico en el ciclo de ejecución del servidor: {str(e)}")

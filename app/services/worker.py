@@ -24,7 +24,15 @@ class ETLWorker:
         self._is_running = False
 
     async def start(self):
-        """Inicia el ciclo continuo del worker."""
+        """Inicia el ciclo continuo del worker (con validación de conectividad Fail-Fast)."""
+        from app.core.db import verify_db_connection_resilient
+        
+        logger.info("[WORKER] Verificando conectividad inicial con SQL Server Staging...")
+        if not verify_db_connection_resilient():
+            logger.critical("🛑 Deteniendo arranque de la interfaz ETL BUK-SPI por imposibilidad de conectar a Staging.")
+            self._is_running = False
+            return
+
         self._is_running = True
         logger.info("[WORKER] Iniciado (intervalo: %.1fs)", self.polling_interval)
 

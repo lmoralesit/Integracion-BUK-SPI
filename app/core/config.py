@@ -1,8 +1,12 @@
 # app/core/config.py
 import re
+from pathlib import Path
 from typing import Optional
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Obtener la raíz absoluta del repositorio (subiendo 2 niveles desde app/core/)
+ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 
 class Settings(BaseSettings):
     """
@@ -133,19 +137,27 @@ class Settings(BaseSettings):
 
     @property
     def sqlserver_url(self) -> str:
-        """Genera Connection String seguro para SQL Server."""
-        pwd = self.SQLSERVER_PASSWORD.get_secret_value()
-        driver = self.SQLSERVER_DRIVER.replace(" ", "+").replace("{", "").replace("}", "")
-        return f"mssql+pyodbc://{self.SQLSERVER_USER}:{pwd}@{self.SQLSERVER_HOST}:{self.SQLSERVER_PORT}/{self.SQLSERVER_DATABASE}?driver={driver}"
+        """Genera Connection String seguro para SQL Server codificando caracteres especiales."""
+        import urllib.parse
+        user = urllib.parse.quote_plus(self.SQLSERVER_USER)
+        pwd = urllib.parse.quote_plus(self.SQLSERVER_PASSWORD.get_secret_value())
+        host = urllib.parse.quote_plus(self.SQLSERVER_HOST)
+        db = urllib.parse.quote_plus(self.SQLSERVER_DATABASE)
+        driver = urllib.parse.quote_plus(self.SQLSERVER_DRIVER)
+        return f"mssql+pyodbc://{user}:{pwd}@{host}:{self.SQLSERVER_PORT}/{db}?driver={driver}"
 
     @property
     def oracle_url(self) -> str:
-        """Genera Connection String seguro para Oracle DB (SPI Infocent)."""
-        pwd = self.ORACLE_PASSWORD.get_secret_value()
-        return f"oracle+oracledb://{self.ORACLE_USER}:{pwd}@{self.ORACLE_HOST}:{self.ORACLE_PORT}/?service_name={self.ORACLE_SERVICE_NAME}"
+        """Genera Connection String seguro para Oracle DB codificando caracteres especiales."""
+        import urllib.parse
+        user = urllib.parse.quote_plus(self.ORACLE_USER)
+        pwd = urllib.parse.quote_plus(self.ORACLE_PASSWORD.get_secret_value())
+        host = urllib.parse.quote_plus(self.ORACLE_HOST)
+        service = urllib.parse.quote_plus(self.ORACLE_SERVICE_NAME)
+        return f"oracle+oracledb://{user}:{pwd}@{host}:{self.ORACLE_PORT}/?service_name={service}"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ROOT_DIR / ".env"),  # Ruta absoluta garantizada
         env_file_encoding="utf-8",
         case_sensitive=True,
         extra="forbid"  # Prevención estricta de Schema Drift y variables extrañas
